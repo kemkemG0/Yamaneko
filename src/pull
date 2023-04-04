@@ -7,9 +7,13 @@ defaultImage="hello-world"
 image="${1:-$defaultImage}"
 container=$(docker create "$image")
 
-docker export "$container" -o "./assets/${image}.tar.gz"
+imagesBasePath="assets/images"
+imagePath="${imagesBasePath}/${image}"
+
+mkdir -p ${imagePath}
+docker export "$container" -o "./${imagePath}/${image}.tar.gz"
 docker rm "$container"
 
-docker inspect -f '{{.Config.Cmd}}' "$image:latest" | tr -d '[]\n' > "./assets/${image}-cmd"
+docker inspect -f '{{.Config.Cmd}}' "$image:latest" | tr -d '[]\n' > "./${imagePath}/${image}-cmd"
 
-echo "Image content stored in assets/${image}.tar.gz"
+echo "Image content stored in ${imagePath}/${image}.tar.gz"
