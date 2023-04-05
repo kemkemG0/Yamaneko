@@ -1,5 +1,5 @@
 [package]
-name = "rusty_container_runtime"
+name = "yamaneko"
 version = "0.1.0"
 edition = "2021"
 

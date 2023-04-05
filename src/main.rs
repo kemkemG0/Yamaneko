@@ -2,7 +2,6 @@ use std::{
     env,
     error::Error,
     fs::{read_to_string, File},
-    os::fd::AsRawFd,
     path::Path,
     process::{Command, ExitStatus, Stdio},
 };
@@ -32,17 +31,21 @@ fn run(args: Vec<String>) {
     let cmd = if args.len() > 3 {
         args[3].clone()
     } else {
-        read_to_string(format!("{}/{}/{}-cmd", images_base_path, image, image)).unwrap()
+        read_to_string(format!("{}/{}/{}-cmd", images_base_path, image, image))
+            .expect("Commane not found")
     };
 
-    let container_path = create_container_path(image).unwrap();
-    un_tar(&tar, Path::new(container_path.as_str())).unwrap();
-    chroot(Path::new(container_path.as_str()), &cmd).unwrap();
+    let container_path = create_container_path(image).expect("Error creating container path");
+    un_tar(&tar, Path::new(container_path.as_str()));
+    chroot(Path::new(container_path.as_str()), &cmd).expect("Error running command");
 }
 
 fn pull(args: Vec<String>) {
     let image = &args[2];
-    pull_image(image).unwrap();
+    match pull_image(image) {
+        Ok(_) => println!("Image pulled"),
+        Err(e) => eprintln!("Error pulling image: {}", e),
+    }
 }
 
 fn execute_command(call: &str, arg: Option<&str>) -> std::io::Result<ExitStatus> {
@@ -53,19 +56,23 @@ fn execute_command(call: &str, arg: Option<&str>) -> std::io::Result<ExitStatus>
     cmd.stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
-        .spawn()?
+        .spawn()
+        .unwrap_or_else(|e| panic!("Error: {:?}\n Command: {} execution failed", e, call))
         .wait()
 }
 
 fn pull_image(image: &str) -> std::io::Result<ExitStatus> {
     println!("Pulling image ....{}", image);
-    execute_command("pull", Some(image))
+    execute_command("./src/pull", Some(image))
 }
 
 fn chroot(new_root: &Path, call: &str) -> std::io::Result<ExitStatus> {
     println!("Running {} in {:?}", call, new_root);
-    nix::unistd::fchdir(File::open(new_root)?.as_raw_fd())?;
-    nix::unistd::chroot(".")?;
+
+    match nix::unistd::chroot(new_root) {
+        Ok(_) => println!("chroot success"),
+        Err(e) => panic!("chroot failed: {}", e),
+    }
     execute_command(call, None)
 }
 
@@ -77,11 +84,19 @@ fn create_container_path(image_name: &str) -> Result<String, Box<dyn Error>> {
     ))
 }
 
-fn un_tar(source: &str, dst: &Path) -> std::io::Result<()> {
-    println!("Unpacking {} to {:?} ...", source, dst);
-    let tar_gz = match File::open(source) {
-        Ok(file) => file,
-        Err(_e) => panic!("{}", _e),
+fn un_tar(source: &str, dst: &Path) {
+    println!("Unpacking {} to {:?} ...{}", source, dst, dst.exists());
+    if dst.exists() {
+        println!("Already unpacked");
+        return;
+    }
+    match tar::Archive::new(match File::open(source) {
+        Ok(f) => f,
+        Err(e) => panic!("Error opening file: {}", e),
+    })
+    .unpack(dst)
+    {
+        Ok(_) => println!("Unpacked"),
+        Err(_) => println!("Already unpacked"),
     };
-    tar::Archive::new(tar_gz).unpack(dst)
 }

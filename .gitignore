@@ -1,7 +1,2 @@
 /target
-dst/
-_assets_redis_tar_gz/
-
-_assets**/
-
-assets/
+/assets
